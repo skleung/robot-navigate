@@ -275,29 +275,25 @@ class VirtualWorldGui:
         time.sleep(0.5)
 
         # point 1
-        joystick.move_up()
-        prox_l, prox_r = joystick.read_proximity()
-        while (prox_l < 70):
-            print "x = ", vrobot.x, " prox = ", prox_l
-            prox_l, prox_r = joystick.read_proximity()
-            time.sleep(0.1)
-        joystick.stop_move()
-        self.localize(0)
-        for _ in range(3):
-            self.align_robot()
-        print "reached first point"
-        joystick.turn_clockwise(math.pi)
-        time.sleep(1)
-        # point 2
-        # TODO: localize to walls
         self.follow_wall(0)
-        self.move_to_prox(22)
-        joystick.turn_clockwise((3*math.pi)/2)
+        joystick.move_right()
+        while (vrobot.a < math.pi/2):
+            time.sleep(0.05)
+            print vrobot.a
+        joystick.stop_move()
+        self.move_to_prox(30)
+        joystick.turn_clockwise(math.pi)
         print "first wall done"
-        # point 3
+        # # point 2
+        # # TODO: localize to walls
         self.follow_wall(1)
-        self.move_to_prox(25)
+        self.move_to_prox(30)
+        joystick.turn_clockwise((3*math.pi)/2)
         print "second wall done"
+        # point 3
+        self.follow_wall(2)
+        self.move_to_prox(25)
+        print "third wall done"
         joystick.turn_counterclockwise(math.pi)
         # point 4
         self.move_to_prox(70)
@@ -313,31 +309,43 @@ class VirtualWorldGui:
         joystick = self.joystick
         vworld = self.vworld
         vrobot = vworld.vrobot
-
-        if (wall_index == 0):
-            wall_angle = math.pi/2 - 0.5
-            forward_angle = math.pi
+        if (wall_index == 0): # TODO: this doesn't work right
+            wall_angle = 0.1
+            forward_angle = math.pi/2
+            follow_range = 300
+            wall_localize_index = -1
+            prox_value = 25
         elif (wall_index == 1):
+            wall_angle = math.pi/2
+            forward_angle = math.pi
+            follow_range = 70
+            wall_localize_index = 0
+            prox_value = 25
+        elif (wall_index == 2):
             wall_angle = math.pi
-            forward_angle = (3*math.pi)/2 - 0.5
+            forward_angle = (3*math.pi)/2 
+            follow_range = 40
+            wall_localize_index = 1
+            prox_value = 30
+
         # move then reallign to wall
         while (True):
             prox_l, prox_r = joystick.read_proximity()
             if (prox_l > 60 and prox_r > 60): break
             joystick.move_up()
-            time.sleep(1) # move at least 1 second
-            for _ in range(30):
-                if (vrobot.dist_l > 35 or vrobot.dist_r > 35): 
-                    print "breaking"
+            for _ in range(follow_range):
+                print "follow_wall:", vrobot.dist_l, vrobot.dist_r 
+                if ((vrobot.dist_l and vrobot.dist_l < 40) or (vrobot.dist_r and vrobot.dist_r < 40)): 
+                    print "breaking:", vrobot.dist_l, vrobot.dist_r
                     break
                 time.sleep(0.05)
-            # time.sleep(1.5) # TODO: put in collision detection
             joystick.stop_move()
             joystick.turn_counterclockwise(wall_angle) 
             for _ in range(3):
                 self.align_robot()
-            self.localize(wall_index)  # TODO: this doesn't really work
-            self.move_to_prox(25)
+            if (wall_localize_index != -1):
+                self.localize(wall_localize_index)  # TODO: this doesn't really work
+            self.move_to_prox(prox_value)
             joystick.turn_clockwise(forward_angle)
             prox_l, prox_r = joystick.read_proximity()
             if (prox_l > 60 and prox_r > 60): break
@@ -348,7 +356,7 @@ class VirtualWorldGui:
         vworld = self.vworld
         vrobot = vworld.vrobot
 
-        for _ in range(50):
+        for _ in range(80):
             if ((vrobot.dist_l < 35 or vrobot.dist_r < 35) and not (not vrobot.dist_r and not vrobot.dist_l)):
                 if (vrobot.dist_l > vrobot.dist_r):
                     # turn right
@@ -366,15 +374,13 @@ class VirtualWorldGui:
         vrobot = vworld.vrobot
 
         if (avg([vrobot.dist_l, vrobot.dist_r]) < proxValue): 
-            # move back?
+            # move back
             joystick.move_down()
             while (vrobot.dist_l < proxValue or vrobot.dist_r < proxValue):
-                time.sleep(0.05)
-        else:
-            # move forward?
-            joystick.move_up()
-            while (vrobot.dist_l > proxValue or vrobot.dist_r > proxValue):
-                time.sleep(0.05)
+                time.sleep(0.02)
+        joystick.move_up()
+        while (vrobot.dist_l > proxValue or vrobot.dist_r > proxValue):
+            time.sleep(0.02)
         joystick.stop_move()
 
 
@@ -396,6 +402,12 @@ class Joystick:
         self.m = m
         self.vrobot = virtual_robot()
         self.vrobot.t = time.time()
+        # calibrations for robot 1
+        self.noise_prox = 25 # noisy level for proximity 
+        self.noise_floor = 20 #floor ambient color - if floor is darker, set higher noise
+        self.p_factor = 1.2 #proximity conversion - assuming linear
+        self.d_factor = 1.04 #travel distance conversion
+        self.a_factor = 17.5 # rotation conversion, assuming linear
 
         rCanvas.bind_all('<w>', self.move_up)
         rCanvas.bind_all('<s>', self.move_down)
@@ -528,11 +540,11 @@ class Joystick:
         # model, as example of how to use the GUI toolkit you need to create you
         # own model
 
-        noise_prox = 25 # noisy level for proximity
-        noise_floor = 20 #floor ambient color - if floor is darker, set higher noise
-        p_factor = 1.2 #proximity conversion - assuming linear
-        d_factor = 1.1 #travel distance conversion
-        a_factor = 22 # rotation conversion, assuming linear
+        noise_prox = self.noise_prox
+        noise_floor = self.noise_floor
+        p_factor = self.p_factor
+        d_factor = self.d_factor
+        a_factor = self.a_factor
 
         while not self.gRobotList:
             print "waiting for robot to connect"
