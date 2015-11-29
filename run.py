@@ -98,8 +98,22 @@ class VirtualWorldGui:
 
     # reset to the starting position for 3-2
     def resetvRobot(self, event=None):
+        # point 0
         self.vworld.vrobot.y = 150
         self.vworld.vrobot.a = math.pi/2
+        # # point 1
+        # self.vworld.vrobot.y = 150
+        # self.vworld.vrobot.x = 240
+        # self.vworld.vrobot.a = math.pi
+        # point 2
+        # self.vworld.vrobot.y = -140
+        # self.vworld.vrobot.x = 240
+        # self.vworld.vrobot.a = (3*math.pi)/2
+        # point 3
+        # self.vworld.vrobot.y = -140
+        # self.vworld.vrobot.x = 80
+        # self.vworld.vrobot.a = math.pi
+        
 
     def toggleTrace(self, event=None):
         if self.vworld.trace:
@@ -258,11 +272,12 @@ class VirtualWorldGui:
 
         self.resetvRobot()
         # put a random delay
-        time.sleep(1)
+        time.sleep(0.5)
 
+        # point 1
         joystick.move_up()
         prox_l, prox_r = joystick.read_proximity()
-        while (prox_l < 55):
+        while (prox_l < 70):
             print "x = ", vrobot.x, " prox = ", prox_l
             prox_l, prox_r = joystick.read_proximity()
             time.sleep(0.1)
@@ -270,23 +285,102 @@ class VirtualWorldGui:
         self.localize(0)
         for _ in range(3):
             self.align_robot()
+        print "reached first point"
         joystick.turn_clockwise(math.pi)
-        prox_l, prox_r = joystick.read_proximity()
-        joystick.move_up()
-        while (vrobot.y > -80):
-            print "y = ", vrobot.y, " prox = ", prox_r
-            prox_l, prox_r = joystick.read_proximity()
-            if (prox_r > 40):
-                joystick.move_left()
-                while (prox_r > 40):
-                    time.sleep(0.05)
-                joystick.move_up()
-            time.sleep(0.05)
+        time.sleep(1)
+        # point 2
+        # TODO: localize to walls
+        self.follow_wall(0)
+        self.move_to_prox(22)
+        joystick.turn_clockwise((3*math.pi)/2)
+        print "first wall done"
+        # point 3
+        self.follow_wall(1)
+        self.move_to_prox(25)
+        print "second wall done"
+        joystick.turn_counterclockwise(math.pi)
+        # point 4
+        self.move_to_prox(70)
+        joystick.move_down()
+        time.sleep(0.4)
         joystick.stop_move()
-        self.localize(1)
-        print "finished localizing"
-        # for _ in range(3):
-            # self.align_robot()
+        joystick.turn_clockwise((3*math.pi)/2)
+        self.move_through()
+        # TODO: send robots to different corners
+        print "finished"
+
+    def follow_wall(self, wall_index):
+        joystick = self.joystick
+        vworld = self.vworld
+        vrobot = vworld.vrobot
+
+        if (wall_index == 0):
+            wall_angle = math.pi/2 - 0.5
+            forward_angle = math.pi
+        elif (wall_index == 1):
+            wall_angle = math.pi
+            forward_angle = (3*math.pi)/2 - 0.5
+        # move then reallign to wall
+        while (True):
+            prox_l, prox_r = joystick.read_proximity()
+            if (prox_l > 60 and prox_r > 60): break
+            joystick.move_up()
+            time.sleep(1) # move at least 1 second
+            for _ in range(30):
+                if (vrobot.dist_l > 35 or vrobot.dist_r > 35): 
+                    print "breaking"
+                    break
+                time.sleep(0.05)
+            # time.sleep(1.5) # TODO: put in collision detection
+            joystick.stop_move()
+            joystick.turn_counterclockwise(wall_angle) 
+            for _ in range(3):
+                self.align_robot()
+            self.localize(wall_index)  # TODO: this doesn't really work
+            self.move_to_prox(25)
+            joystick.turn_clockwise(forward_angle)
+            prox_l, prox_r = joystick.read_proximity()
+            if (prox_l > 60 and prox_r > 60): break
+
+
+    def move_through(self):
+        joystick = self.joystick
+        vworld = self.vworld
+        vrobot = vworld.vrobot
+
+        for _ in range(50):
+            if ((vrobot.dist_l < 35 or vrobot.dist_r < 35) and not (not vrobot.dist_r and not vrobot.dist_l)):
+                if (vrobot.dist_l > vrobot.dist_r):
+                    # turn right
+                    joystick.move_right()
+                else:
+                    joystick.move_left()
+            else:
+                joystick.move_up()
+            time.sleep(0.1)
+        joystick.stop_move()
+
+    def move_to_prox(self, proxValue):
+        joystick = self.joystick
+        vworld = self.vworld
+        vrobot = vworld.vrobot
+
+        if (avg([vrobot.dist_l, vrobot.dist_r]) < proxValue): 
+            # move back?
+            joystick.move_down()
+            while (vrobot.dist_l < proxValue or vrobot.dist_r < proxValue):
+                time.sleep(0.05)
+        else:
+            # move forward?
+            joystick.move_up()
+            while (vrobot.dist_l > proxValue or vrobot.dist_r > proxValue):
+                time.sleep(0.05)
+        joystick.stop_move()
+
+
+def avg(values):
+    return sum(values)/len(values)
+
 
 def calculate_least_sqs(xvalues, yvalues):
     x = np.array(xvalues)
@@ -359,14 +453,14 @@ class Joystick:
     def turn_clockwise(self, angle):
         if self.gRobotList:
             self.move_right()
-            while(self.vrobot.a < angle):
+            while((self.vrobot.a % (2*math.pi)) < angle):
                 time.sleep(0.1)
             self.stop_move()
 
     def turn_counterclockwise(self, angle):
         if self.gRobotList:
             self.move_left()
-            while(self.vrobot.a > angle):
+            while((self.vrobot.a % (2*math.pi)) > angle):
                 time.sleep(0.1)
             self.stop_move()
 
