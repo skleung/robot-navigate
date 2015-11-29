@@ -43,13 +43,12 @@ rectE = [0, -140, -100, -180]
 rectD = [-100, -180, -140, -80]
 rectA = [-220, -20, -260, 20]
 robot_index = 0
-#localizing state is initailized to first localize to the x of F
-localize_state = "Fx"
 
 class VirtualWorldGui:
     def __init__(self, vWorld, joystick, m):
         self.vworld = vWorld
         self.joystick = joystick
+        self.navigation_queue = Queue.Queue()
         self.gRobotList = None
 
         self.button0 = tk.Button(m,text="Grid")
@@ -84,17 +83,21 @@ class VirtualWorldGui:
         self.button7.pack(side='left')
         self.button7.bind('<Button-1>', self.localize)
 
-        self.button8 = tk.Button(m,text="START")
+        self.button8 = tk.Button(m,text="ROBOT1")
         self.button8.pack(side='left')
         self.button8.bind('<Button-1>', self.start_navigating)
 
-        self.button9 = tk.Button(m,text="START-2")
+        self.button9 = tk.Button(m,text="ROBOT2")
         self.button9.pack(side='left')
         self.button9.bind('<Button-1>', self.start_navigating_2)
 
-        self.button9 = tk.Button(m,text="Exit")
-        self.button9.pack(side='left')
-        self.button9.bind('<Button-1>', stopProg)
+        self.button10 = tk.Button(m,text="ROBOT3")
+        self.button10.pack(side='left')
+        self.button10.bind('<Button-1>', self.start_navigating_3)
+
+        self.button11 = tk.Button(m,text="Exit")
+        self.button11.pack(side='left')
+        self.button11.bind('<Button-1>', stopProg)
 
     # reset to the starting position for 3-2
     def resetvRobot(self, event=None):
@@ -113,7 +116,7 @@ class VirtualWorldGui:
         # self.vworld.vrobot.y = -140
         # self.vworld.vrobot.x = 80
         # self.vworld.vrobot.a = math.pi
-        
+
 
     def toggleTrace(self, event=None):
         if self.vworld.trace:
@@ -215,18 +218,21 @@ class VirtualWorldGui:
             vrobot.x = ref[i] + math.cos(angle)*perp_dist
 
     def start_navigating(self, event=None):
-        print "START NAVIGATION PRESSED"
-        navigate_vrobot_thread = threading.Thread(target=self.navigate_robot)
+        print "NAVIGATING ROBOT 1"
+        navigate_vrobot_thread = threading.Thread(target=self.navigate_robot, args=(self.navigation_queue,))
         navigate_vrobot_thread.daemon = True
         navigate_vrobot_thread.start()
+        self.navigation_queue.put("Start Navigating")
 
     def start_navigating_2(self, event=None):
         global robot_index
-        print "START NAVIGATION FOR 2"
-        robot_index = 1
-        navigate_vrobot_thread = threading.Thread(target=self.navigate_robot)
-        navigate_vrobot_thread.daemon = True
-        navigate_vrobot_thread.start()
+        print "NAVIGATING ROBOT 2"
+        self.navigation_queue.put("Start Navigating")
+
+    def start_navigating_3(self, event=None):
+        global robot_index
+        print "NAVIGATING ROBOT 3"
+        self.navigation_queue.put("Start Navigating")
 
     # aligns robot to face an obstacle head on
     def align_robot(self):
@@ -241,26 +247,8 @@ class VirtualWorldGui:
                 time.sleep(0.05)
         self.joystick.stop_move()
 
-    # aligns robot to face the last obstacle
-    def align_robot_end(self):
-        vrobot = self.vworld.vrobot
-        print "ending"
-        if (vrobot.dist_r and not vrobot.dist_l):
-            print "case 1"
-            self.joystick.move_right()
-            while(not vrobot.dist_l):
-                time.sleep(0.075)
-        elif (vrobot.dist_l and not vrobot.dist_r):
-            print "case 2"
-            self.joystick.move_left()
-            while(not vrobot.dist_r):
-                time.sleep(0.075)
-        else:
-            print "case 3"
-            self.align_robot()
-        self.joystick.stop_move()
-
-    def navigate_robot(self):
+    def navigate_robot(self, navigation_queue):
+        global robot_index
         joystick = self.joystick
         vworld = self.vworld
         time.sleep(1) # give time for robot to connect.
@@ -270,44 +258,62 @@ class VirtualWorldGui:
             print "waiting for robot to connect"
             time.sleep(0.1)
 
-        self.resetvRobot()
-        # put a random delay
-        time.sleep(0.5)
+        while (robot_index != 3):
+            if (navigation_queue.qsize() > 0):
+                print navigation_queue.get()
+                if (vrobot.y != 150):
+                    # need to draw robot at last position
+                    print "drawing the last moved robot!"
+                    print robot_index
+                    coords = self.vworld.canvas.coords(vrobot.poly_id)
+                    print coords
+                    self.vworld.canvas.create_polygon(coords, outline="blue")
 
-        # point 1
-        joystick.move_up()
-        prox_l, prox_r = joystick.read_proximity()
-        while (prox_l < 70):
-            print "x = ", vrobot.x, " prox = ", prox_l
-            prox_l, prox_r = joystick.read_proximity()
-            time.sleep(0.1)
-        joystick.stop_move()
-        self.localize(0)
-        for _ in range(3):
-            self.align_robot()
-        print "reached first point"
-        joystick.turn_clockwise(math.pi)
-        time.sleep(1)
-        # point 2
-        # TODO: localize to walls
-        self.follow_wall(0)
-        self.move_to_prox(22)
-        joystick.turn_clockwise((3*math.pi)/2)
-        print "first wall done"
-        # point 3
-        self.follow_wall(1)
-        self.move_to_prox(25)
-        print "second wall done"
-        joystick.turn_counterclockwise(math.pi)
-        # point 4
-        self.move_to_prox(70)
-        joystick.move_down()
-        time.sleep(0.4)
-        joystick.stop_move()
-        joystick.turn_clockwise((3*math.pi)/2)
-        self.move_through()
-        # TODO: send robots to different corners
-        print "finished"
+                self.resetvRobot()
+                # put a random delay
+                print "navigating robot ", robot_index
+                time.sleep(0.5)
+                # point 1
+                joystick.move_up()
+                # fake moving
+                time.sleep(1)
+                joystick.stop_move()
+                print "done navigating robot ", robot_index
+                robot_index += 1
+
+                # prox_l, prox_r = joystick.read_proximity()
+                # while (prox_l < 70):
+                #     # print "x = ", vrobot.x, " prox = ", prox_l
+                #     prox_l, prox_r = joystick.read_proximity()
+                #     time.sleep(0.1)
+                # joystick.stop_move()
+                # self.localize(0)
+                # for _ in range(3):
+                #     self.align_robot()
+                # print "reached first point"
+                # joystick.turn_clockwise(math.pi)
+                # time.sleep(1)
+                # # point 2
+                # # TODO: localize to walls
+                # self.follow_wall(0)
+                # self.move_to_prox(22)
+                # joystick.turn_clockwise((3*math.pi)/2)
+                # print "first wall done"
+                # # point 3
+                # self.follow_wall(1)
+                # self.move_to_prox(25)
+                # print "second wall done"
+                # joystick.turn_counterclockwise(math.pi)
+                # # point 4
+                # self.move_to_prox(70)
+                # joystick.move_down()
+                # time.sleep(0.4)
+                # joystick.stop_move()
+                # joystick.turn_clockwise((3*math.pi)/2)
+                # self.move_through()
+                # TODO: send robots to different corners
+            time.sleep(0.5)
+        print "outside of the while loop"
 
     def follow_wall(self, wall_index):
         joystick = self.joystick
@@ -327,13 +333,13 @@ class VirtualWorldGui:
             joystick.move_up()
             time.sleep(1) # move at least 1 second
             for _ in range(30):
-                if (vrobot.dist_l > 35 or vrobot.dist_r > 35): 
+                if (vrobot.dist_l > 35 or vrobot.dist_r > 35):
                     print "breaking"
                     break
                 time.sleep(0.05)
             # time.sleep(1.5) # TODO: put in collision detection
             joystick.stop_move()
-            joystick.turn_counterclockwise(wall_angle) 
+            joystick.turn_counterclockwise(wall_angle)
             for _ in range(3):
                 self.align_robot()
             self.localize(wall_index)  # TODO: this doesn't really work
@@ -365,7 +371,7 @@ class VirtualWorldGui:
         vworld = self.vworld
         vrobot = vworld.vrobot
 
-        if (avg([vrobot.dist_l, vrobot.dist_r]) < proxValue): 
+        if (avg([vrobot.dist_l, vrobot.dist_r]) < proxValue):
             # move back?
             joystick.move_down()
             while (vrobot.dist_l < proxValue or vrobot.dist_r < proxValue):
@@ -377,10 +383,8 @@ class VirtualWorldGui:
                 time.sleep(0.05)
         joystick.stop_move()
 
-
 def avg(values):
     return sum(values)/len(values)
-
 
 def calculate_least_sqs(xvalues, yvalues):
     x = np.array(xvalues)
