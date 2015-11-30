@@ -21,6 +21,7 @@
 
 import Tkinter as tk
 import time
+from fsm import *
 from HamsterAPI.comm_ble import RobotComm
 import math
 import numpy as np
@@ -31,7 +32,7 @@ UPDATE_INTERVAL = 30
 
 comm = None
 gMaxRobotNum = 2; # max number of robots to control
-# gRobotList = None
+collision_queue = Queue.Queue()
 gQuit = False
 m = None
 
@@ -48,6 +49,8 @@ class VirtualWorldGui:
     def __init__(self, vWorld, joystick, m):
         self.vworld = vWorld
         self.joystick = joystick
+        self.existingThreads = []
+        self.joysticks = []
         self.navigation_queue = Queue.Queue()
         self.gRobotList = None
 
@@ -95,6 +98,10 @@ class VirtualWorldGui:
         self.button10.pack(side='left')
         self.button10.bind('<Button-1>', self.start_navigating_3)
 
+        self.button11 = tk.Button(m,text="TAG")
+        self.button11.pack(side='left')
+        self.button11.bind('<Button-1>', self.start_tag)
+
         self.button11 = tk.Button(m,text="Exit")
         self.button11.pack(side='left')
         self.button11.bind('<Button-1>', stopProg)
@@ -102,6 +109,7 @@ class VirtualWorldGui:
     # reset to the starting position for 3-2
     def resetvRobot(self, event=None):
         # point 0
+        self.vworld.vrobot.x = 0
         self.vworld.vrobot.y = 150
         self.vworld.vrobot.a = math.pi/2
         # # point 1
@@ -263,13 +271,13 @@ class VirtualWorldGui:
         while (robot_index != 3):
             if (navigation_queue.qsize() > 0):
                 print navigation_queue.get()
-                if (vrobot.y != 150):
+                if (not (vrobot.y == 150 and vrobot.x == 0)):
                     # need to draw robot at last position
                     print "drawing the last moved robot!"
                     print robot_index
                     coords = self.vworld.canvas.coords(vrobot.poly_id)
                     print coords
-                    self.vworld.canvas.create_polygon(coords, outline="blue")
+                    self.vworld.canvas.create_polygon(coords, fill="gray")
 
                 self.resetvRobot()
                 # put a random delay
@@ -278,40 +286,40 @@ class VirtualWorldGui:
                 # point 1
                 joystick.move_up()
                 # fake moving
-                # time.sleep(1)
-                # joystick.stop_move()
-                # print "done navigating robot ", robot_index
+                time.sleep(1)
+                joystick.stop_move()
+                print "done navigating robot ", robot_index
 
                 # point 1
-                self.follow_wall(0)
-                joystick.move_right()
-                while (vrobot.a < math.pi/2):
-                    time.sleep(0.05)
-                    print vrobot.a
-                joystick.stop_move()
-                self.move_to_prox(30)
-                joystick.turn_clockwise(math.pi)
-                print "first wall done"
-                # # point 2
-                # # TODO: localize to walls
-                self.follow_wall(1)
-                self.move_to_prox(30)
-                joystick.turn_clockwise((3*math.pi)/2)
-                print "second wall done"
-                # point 3
-                self.follow_wall(2)
-                self.move_to_prox(25)
-                print "third wall done"
-                joystick.turn_counterclockwise(math.pi)
-                # point 4
-                self.move_to_prox(70)
-                joystick.move_down()
-                time.sleep(0.4)
-                joystick.stop_move()
-                joystick.turn_clockwise((3*math.pi)/2)
-                self.move_through()
-                # TODO: send robots to different corners
-                print "finished"
+                # self.follow_wall(0)
+                # joystick.move_right()
+                # while (vrobot.a < math.pi/2):
+                #     time.sleep(0.05)
+                #     print vrobot.a
+                # joystick.stop_move()
+                # self.move_to_prox(30)
+                # joystick.turn_clockwise(math.pi)
+                # print "first wall done"
+                # # # point 2
+                # # # TODO: localize to walls
+                # self.follow_wall(1)
+                # self.move_to_prox(30)
+                # joystick.turn_clockwise((3*math.pi)/2)
+                # print "second wall done"
+                # # point 3
+                # self.follow_wall(2)
+                # self.move_to_prox(25)
+                # print "third wall done"
+                # joystick.turn_counterclockwise(math.pi)
+                # # point 4
+                # self.move_to_prox(70)
+                # joystick.move_down()
+                # time.sleep(0.4)
+                # joystick.stop_move()
+                # joystick.turn_clockwise((3*math.pi)/2)
+                # self.move_through()
+                # # TODO: send robots to different corners
+                # print "finished"
 
     def follow_wall(self, wall_index):
         joystick = self.joystick
@@ -390,6 +398,159 @@ class VirtualWorldGui:
         while (vrobot.dist_l > proxValue or vrobot.dist_r > proxValue):
             time.sleep(0.02)
         joystick.stop_move()
+
+    def start_tag(self, event=None):
+        self.tag()
+
+    def tag(self):
+        for robot in comm.robotList:
+            joystick = Joystick(comm, self.m, self.rCanvas, robot)
+            self.joysticks.append(joystick)
+
+    def tag(self, event=None):
+        self.collide()
+        self.fsm()
+
+    def fsm(self, event=None):
+        for i, robot in enumerate(comm.robotList):
+            fsm = None
+            if i == 0:
+                fsm = StateMachine(robot, self.joysticks[i])
+                fsm.queue.put("got tagged") # it
+            else:
+                fsm = StateMachine(robot, self.joysticks[i])
+                fsm.queue.put("tagged") # not it
+            self.fsms.append(fsm)
+            fsm_thread = threading.Thread(target=fsm.run)
+            fsm_thread.daemon = True
+            fsm_thread.start()
+
+            thread = threading.Thread(target=collectData, args=(fsm.queue, robot))
+            thread.daemon = True
+            thread.start()
+
+    def collide(self, event=None):
+        if self.existingThreads:
+            pass
+        else:
+            for i in range(len(comm.robotList)):
+                sensor_thread = threading.Thread(target=self.senseCollision, args=(i,))
+                sensor_thread.daemon = True
+                sensor_thread.start()
+                self.existingThreads.append(sensor_thread)
+
+            detect_thread = threading.Thread(target=self.detectCollision)
+            detect_thread.daemon = True
+            detect_thread.start()
+            self.existingThreads.append(detect_thread)
+
+    def maintainItState(self):
+        n_its = 0
+        for fsm in self.fsms:
+            if fsm.currentState[0:2] == "It":
+                n_its += 1
+        if n_its > 1:
+            print "too many its"
+            for fsm in self.fsms:
+                fsm.queue.put("tagged")
+        if n_its < 1:
+            print "too few its"
+            self.fsms[2].queue.put("got tagged")
+
+    def detectCollision(self):
+        time.sleep(0.5)
+
+        while not gQuit:
+            while(collision_queue.empty()):
+                time.sleep(0.1)
+                self.maintainItState()
+
+            collide_index_1, ts1 =  collision_queue.get()
+            self.maintainItState()
+            while(not collision_queue.empty()):
+                # two independent collisions are detected
+                collide_index_2, ts2 = collision_queue.get()
+                if collide_index_1 != collide_index_2 and abs(ts2 - ts1) < 0.5:
+                    if (self.fsms[collide_index_1].currentState[0:2] == "It" or self.fsms[collide_index_2].currentState[0:2] == "It"):
+                        it_index = collide_index_1 if self.fsms[collide_index_1].currentState[0:2] == "It" else collide_index_2
+                        not_it_index = collide_index_2 if self.fsms[collide_index_1].currentState[0:2] == "It" else collide_index_1
+                        self.fsms[it_index].queue.put("tagged")
+                        self.fsms[not_it_index].queue.put("got tagged")
+                        print "tag detected", "it:", it_index, "not it:", not_it_index
+                        print "successfull tag:", self.fsms[it_index].currentState[0:2] == "It"
+                self.maintainItState()
+
+
+    def lowpass(self, alpha, old, new):
+        return alpha * new + (1.0 - alpha) * old
+
+    def difference(self, old, new):
+        return old - new
+
+    def collision_detection(self, acc_x, acc_y, i):
+        dx = self.difference(self._acc_x[i], acc_x)
+        dy = self.difference(self._acc_y[i], acc_y)
+        mag2 = dx*dx + dy*dy
+        if (mag2 > self._mag_diff2):
+            return math.sqrt(mag2)
+        else:
+            return -mag2
+
+    def senseCollision(self, i):
+        time.sleep(0.5)
+
+        lastX = None
+        lastY = None
+        smoothingFactor = 0.8
+        collisionThreshold = 700
+        while not gQuit:
+            x, y, z = self.joysticks[i].read_accelerometer_data(i)
+            acc_x = x/100.0
+            acc_y = y/100.0
+            acc_x = self.lowpass(self._alpha, self._acc_x[i], acc_x)
+            acc_y = self.lowpass(self._alpha, self._acc_y[i], acc_y)
+            mag = self.collision_detection(acc_x, acc_y, i)
+            # print "from ", str(i), " mag = ", mag
+            self._acc_x[i] = acc_x
+            self._acc_y[i] = acc_y
+            if (mag > 0):
+                collision_queue.put((i, time.time()))
+                print "collision detected from "+str(i), mag
+                elem = {}
+                elem[0] = self._acc_x
+                elem[1] = self._acc_y
+            time.sleep(self._period)
+
+PROXIMITY_THRESHOLD = 30
+PROXIMITY_ERROR = 5
+def collectData(queue, robot):
+    while not gQuit:
+
+        # sense floor
+        floor_left = robot.get_floor(0)
+        floor_right = robot.get_floor(1)
+        proximity_left = robot.get_proximity(0)
+        proximity_right = robot.get_proximity(1)
+
+        if (proximity_left > PROXIMITY_THRESHOLD or proximity_right > PROXIMITY_THRESHOLD): # obj detected
+            if (proximity_left > proximity_right and (proximity_left - proximity_right) > PROXIMITY_ERROR):
+                queue.put("obj left")
+            elif (proximity_left < proximity_right and (proximity_right - proximity_left) > PROXIMITY_ERROR):
+                queue.put("obj right")
+            else:
+                queue.put("obj ahead")
+        else:
+            queue.put("clear")
+
+        # print "floor:", floor_left, floor_right
+        if (floor_left < 30):
+            queue.put("floor left")
+        elif (floor_right < 30):
+            queue.put("floor right")
+        else:
+            queue.put("floor clear")
+
+        time.sleep(0.05)
 
 def avg(values):
     return sum(values)/len(values)
@@ -483,8 +644,18 @@ class Joystick:
             self.stop_move()
 
     def read_proximity(self):
-        robot = self.gRobotList[robot_index]
-        return robot.get_proximity(0), robot.get_proximity(1)
+        if self.gRobotList and robot_index < len(self.gRobotList):
+            robot = self.gRobotList[robot_index]
+            return robot.get_proximity(0), robot.get_proximity(1)
+
+    def read_accelerometer_data(self, i):
+        if self.gRobotList and i < len(self.gRobotList):
+            robot = self.gRobotList[i]
+            x = robot.get_acceleration(0)
+            y = robot.get_acceleration(1)
+            z = robot.get_acceleration(2)
+            return (x,y,z)
+        return None
 
     def move_to(self, x, y):
         # adjust x
