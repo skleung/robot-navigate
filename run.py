@@ -157,7 +157,7 @@ class VirtualWorldGui:
         # point 3
         # self.vworld.vrobot.y = -140
         # self.vworld.vrobot.x = 80
-        # self.vworld.vrobot.a = math.pi
+        # self.vworld.vrobot.a = (3*math.pi)/2 
 
 
     def toggleTrace(self, event=None):
@@ -321,12 +321,6 @@ class VirtualWorldGui:
                 time.sleep(0.5)
                 # point 1
                 joystick.move_up()
-                # fake moving
-
-                # time.sleep(1)
-                # joystick.stop_move()
-                # print "done navigating robot ", robot_index
-
                 # point 1
                 self.follow_wall(0)
                 joystick.move_right()
@@ -337,8 +331,7 @@ class VirtualWorldGui:
                 self.move_to_prox(30)
                 joystick.turn_clockwise(math.pi)
                 print "first wall done"
-                # # point 2
-                # # TODO: localize to walls
+                # point 2
                 self.follow_wall(1)
                 self.move_to_prox(30)
                 joystick.turn_clockwise((3*math.pi)/2)
@@ -347,23 +340,69 @@ class VirtualWorldGui:
                 self.follow_wall(2)
                 self.move_to_prox(25)
                 print "third wall done"
-                joystick.turn_counterclockwise(math.pi)
-                for _ in range(3):
-                    print "ALIGNING"
-                    self.align_robot()
-                joystick.move_down()
-                time.sleep(0.5)
-                joystick.stop_move()
-                self.align_robot()
-                # point 4
-                self.move_to_prox(70)
-                joystick.move_down()
-                time.sleep(0.75)
-                joystick.stop_move()
-                joystick.turn_clockwise((3*math.pi)/2)
+                # problem area
+                joystick.turn_clockwise(2*math.pi - 0.1)    
+                self.reach_y_value(-40)
+                # go through gate
+                joystick.turn_counterclockwise((3*math.pi)/2)
+                joystick.move_left()
+                while ((vrobot.dist_l and vrobot.dist_l < 40) or (vrobot.dist_r and vrobot.dist_r < 40)):
+                    print "extra turning 2"
+                    time.sleep(0.05)
+                joystick.stop_move()                
                 self.move_through()
-                # TODO: send robots to different corners
+                self.move_to_line()
                 print "finished"
+
+    def move_to_line(self):
+        global robot_index
+        joystick = self.joystick
+        vworld = self.vworld
+        vrobot = vworld.vrobot
+        if (robot_index == 0):
+            joystick.move_right() 
+            time.sleep(1)
+        elif (robot_index == 1):
+            joystick.move_left()
+            time.sleep(1)
+        joystick.move_up()
+        while (True):
+            if (vrobot.floor_l and vrobot.floor_l < 30): break
+            if (vrobot.floor_r and vrobot.floor_r < 30): break
+            print "floor:", vrobot.floor_l, vrobot.floor_r
+            time.sleep(0.05)
+        joystick.move_down()
+        time.sleep(1)
+
+
+
+    def reach_y_value(self, yvalue):
+        joystick = self.joystick
+        vworld = self.vworld
+        vrobot = vworld.vrobot
+        # check if robot turned enough
+        joystick.move_right()
+        while ((vrobot.dist_l and vrobot.dist_l < 40) or (vrobot.dist_r and vrobot.dist_r < 40)):
+            print "extra turning"
+            time.sleep(0.05)
+        joystick.stop_move()
+
+        while (True):
+            joystick.move_up()
+            if ((vrobot.dist_l and vrobot.dist_l < 40) or (vrobot.dist_r and vrobot.dist_r < 40)):
+                print "close dist break"
+                break
+            elif (abs(yvalue - vrobot.y) < 5):
+                break
+            elif (vrobot.dist_l and vrobot.dist_l < 70 and vrobot.dist_r and vrobot.dist_r < 70):
+                print "dist break"
+                # joystick.move_down()
+                # time.sleep(1.5)
+                break
+
+            time.sleep(0.05)
+        joystick.stop_move()
+
 
     def follow_wall(self, wall_index):
         joystick = self.joystick
