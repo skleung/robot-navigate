@@ -286,40 +286,41 @@ class VirtualWorldGui:
                 # point 1
                 joystick.move_up()
                 # fake moving
-                time.sleep(1)
-                joystick.stop_move()
-                print "done navigating robot ", robot_index
+
+                # time.sleep(1)
+                # joystick.stop_move()
+                # print "done navigating robot ", robot_index
 
                 # point 1
-                # self.follow_wall(0)
-                # joystick.move_right()
-                # while (vrobot.a < math.pi/2):
-                #     time.sleep(0.05)
-                #     print vrobot.a
-                # joystick.stop_move()
-                # self.move_to_prox(30)
-                # joystick.turn_clockwise(math.pi)
-                # print "first wall done"
-                # # # point 2
-                # # # TODO: localize to walls
-                # self.follow_wall(1)
-                # self.move_to_prox(30)
-                # joystick.turn_clockwise((3*math.pi)/2)
-                # print "second wall done"
-                # # point 3
-                # self.follow_wall(2)
-                # self.move_to_prox(25)
-                # print "third wall done"
-                # joystick.turn_counterclockwise(math.pi)
-                # # point 4
-                # self.move_to_prox(70)
-                # joystick.move_down()
-                # time.sleep(0.4)
-                # joystick.stop_move()
-                # joystick.turn_clockwise((3*math.pi)/2)
-                # self.move_through()
-                # # TODO: send robots to different corners
-                # print "finished"
+                self.follow_wall(0)
+                joystick.move_right()
+                while (vrobot.a < math.pi/2):
+                    time.sleep(0.05)
+                    print vrobot.a
+                joystick.stop_move()
+                self.move_to_prox(30)
+                joystick.turn_clockwise(math.pi)
+                print "first wall done"
+                # # point 2
+                # # TODO: localize to walls
+                self.follow_wall(1)
+                self.move_to_prox(30)
+                joystick.turn_clockwise((3*math.pi)/2)
+                print "second wall done"
+                # point 3
+                self.follow_wall(2)
+                self.move_to_prox(25)
+                print "third wall done"
+                joystick.turn_counterclockwise(math.pi)
+                # point 4
+                self.move_to_prox(70)
+                joystick.move_down()
+                time.sleep(0.4)
+                joystick.stop_move()
+                joystick.turn_clockwise((3*math.pi)/2)
+                self.move_through()
+                # TODO: send robots to different corners
+                print "finished"
 
     def follow_wall(self, wall_index):
         joystick = self.joystick
