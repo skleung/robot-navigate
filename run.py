@@ -31,10 +31,11 @@ from tk_hamster_GUI import *
 UPDATE_INTERVAL = 30
 
 comm = None
-gMaxRobotNum = 2; # max number of robots to control
+gMaxRobotNum = 3; # max number of robots to control
 collision_queue = Queue.Queue()
 gQuit = False
 m = None
+NUM_TAGS_TO_WIN = 5
 
 #objects in the world
 rectF = [0, 50, 40, -50]
@@ -45,14 +46,47 @@ rectD = [-100, -180, -140, -80]
 rectA = [-220, -20, -260, 20]
 robot_index = 0
 
+robot1_config = {}
+robot1_config["noise_prox"] = 25 # noisy level for proximity
+robot1_config["noise_floor"] = 20 #floor ambient color - if floor is darker, set higher noise
+robot1_config["p_factor"] = 1.2 #proximity conversion - assuming linear
+robot1_config["d_factor"] = 1.04 #travel distance conversion
+robot1_config["a_factor"] = 17.5 # rotation conversion, assuming linear
+
+robot2_config = {}
+robot2_config["noise_prox"] = 25 # noisy level for proximity
+robot2_config["noise_floor"] = 20 #floor ambient color - if floor is darker, set higher noise
+robot2_config["p_factor"] = 1.2 #proximity conversion - assuming linear
+robot2_config["d_factor"] = 1.0 #travel distance conversion
+robot2_config["a_factor"] = 17.8 # rotation conversion, assuming linear
+
+robot3_config = {}
+robot3_config["noise_prox"] = 25 # noisy level for proximity
+robot3_config["noise_floor"] = 20 #floor ambient color - if floor is darker, set higher noise
+robot3_config["p_factor"] = 1.2 #proximity conversion - assuming linear
+robot3_config["d_factor"] = 1.05 #travel distance conversion
+robot3_config["a_factor"] = 16.5 # rotation conversion, assuming linear
+
+robot_configs = [robot1_config, robot2_config, robot3_config]
+
 class VirtualWorldGui:
     def __init__(self, vWorld, joystick, m):
         self.vworld = vWorld
         self.joystick = joystick
         self.existingThreads = []
         self.joysticks = []
+        self.fsms = []
         self.navigation_queue = Queue.Queue()
         self.gRobotList = None
+
+        #collision variables
+        self._period = 0.05
+        self._freq_cutoff = 40
+        self._RC = 1/(2 * math.pi * self._freq_cutoff)
+        self._alpha = self._period / (self._RC + self._period)
+        self._acc_x = [0]*gMaxRobotNum
+        self._acc_y = [0]*gMaxRobotNum
+        self._mag_diff2 = 15 * 15
 
         self.button0 = tk.Button(m,text="Grid")
         self.button0.pack(side='left')
@@ -214,7 +248,7 @@ class VirtualWorldGui:
             vrobot.x = ref[i] - math.cos(angle)*perp_dist
         elif i==1:
             vrobot.a = angle + math.pi
-            vrobot.x = ref[i] + math.cos(angle)*perp_dist
+            vrobot.y = ref[i] + math.cos(angle)*perp_dist
         elif i==2:
             vrobot.a = angle + 3*math.pi/2.0
             vrobot.y = ref[i] + math.cos(angle)*perp_dist
@@ -235,6 +269,7 @@ class VirtualWorldGui:
     def start_navigating_2(self, event=None):
         global robot_index
         print "NAVIGATING ROBOT 2"
+        self.joystick.set_config(robot_configs[1])
         robot_index = 1
         self.navigation_queue.put("Start Navigating")
 
@@ -242,6 +277,7 @@ class VirtualWorldGui:
         global robot_index
         print "NAVIGATING ROBOT 3"
         robot_index = 2
+        self.joystick.set_config(robot_configs[2])
         self.navigation_queue.put("Start Navigating")
 
     # aligns robot to face an obstacle head on
@@ -250,11 +286,11 @@ class VirtualWorldGui:
         if (vrobot.dist_r > vrobot.dist_l):
             self.joystick.move_left()
             while(vrobot.dist_r > vrobot.dist_l):
-                time.sleep(0.05)
+                time.sleep(0.02)
         else:
             self.joystick.move_right()
             while(vrobot.dist_l > vrobot.dist_r):
-                time.sleep(0.05)
+                time.sleep(0.02)
         self.joystick.stop_move()
 
     def navigate_robot(self, navigation_queue):
@@ -312,10 +348,17 @@ class VirtualWorldGui:
                 self.move_to_prox(25)
                 print "third wall done"
                 joystick.turn_counterclockwise(math.pi)
+                for _ in range(3):
+                    print "ALIGNING"
+                    self.align_robot()
+                joystick.move_down()
+                time.sleep(0.5)
+                joystick.stop_move()
+                self.align_robot()
                 # point 4
                 self.move_to_prox(70)
                 joystick.move_down()
-                time.sleep(0.4)
+                time.sleep(0.75)
                 joystick.stop_move()
                 joystick.turn_clockwise((3*math.pi)/2)
                 self.move_through()
@@ -404,11 +447,10 @@ class VirtualWorldGui:
         self.tag()
 
     def tag(self):
-        for robot in comm.robotList:
-            joystick = Joystick(comm, self.m, self.rCanvas, robot)
+        for i, robot in enumerate(comm.robotList):
+            joystick = Joystick(comm, m, self.vworld.canvas, robot_configs[i])
+            joystick.robot = robot
             self.joysticks.append(joystick)
-
-    def tag(self, event=None):
         self.collide()
         self.fsm()
 
@@ -446,6 +488,7 @@ class VirtualWorldGui:
             self.existingThreads.append(detect_thread)
 
     def maintainItState(self):
+        if len(self.fsms) < 1: return
         n_its = 0
         for fsm in self.fsms:
             if fsm.currentState[0:2] == "It":
@@ -456,7 +499,7 @@ class VirtualWorldGui:
                 fsm.queue.put("tagged")
         if n_its < 1:
             print "too few its"
-            self.fsms[2].queue.put("got tagged")
+            self.fsms[0].queue.put("got tagged")
 
     def detectCollision(self):
         time.sleep(0.5)
@@ -471,16 +514,24 @@ class VirtualWorldGui:
             while(not collision_queue.empty()):
                 # two independent collisions are detected
                 collide_index_2, ts2 = collision_queue.get()
-                if collide_index_1 != collide_index_2 and abs(ts2 - ts1) < 0.5:
+                if collide_index_1 != collide_index_2 and abs(ts2 - ts1) < 0.25:
                     if (self.fsms[collide_index_1].currentState[0:2] == "It" or self.fsms[collide_index_2].currentState[0:2] == "It"):
                         it_index = collide_index_1 if self.fsms[collide_index_1].currentState[0:2] == "It" else collide_index_2
                         not_it_index = collide_index_2 if self.fsms[collide_index_1].currentState[0:2] == "It" else collide_index_1
                         self.fsms[it_index].queue.put("tagged")
+                        self.check_end_state(it_index)
                         self.fsms[not_it_index].queue.put("got tagged")
                         print "tag detected", "it:", it_index, "not it:", not_it_index
                         print "successfull tag:", self.fsms[it_index].currentState[0:2] == "It"
                 self.maintainItState()
 
+    def check_end_state(self, it_index):
+        if self.fsms[it_index].numTags >= NUM_TAGS_TO_WIN:
+            for i, fsm in enumerate(self.fsms):
+                if i != it_index:
+                    self.fsms[i].queue.put("stop")
+                else:
+                    self.fsms[it_index].queue.put("victory")
 
     def lowpass(self, alpha, old, new):
         return alpha * new + (1.0 - alpha) * old
@@ -564,18 +615,20 @@ def calculate_least_sqs(xvalues, yvalues):
     return (m, b)
 
 class Joystick:
-    def __init__(self, comm, m, rCanvas):
+    def __init__(self, comm, m, rCanvas, configs):
         self.gMaxRobotNum = 1
         self.gRobotList = comm.robotList
         self.m = m
+        self.robot = None
+        self.speed = 30
         self.vrobot = virtual_robot()
         self.vrobot.t = time.time()
         # calibrations for robot 1
-        self.noise_prox = 25 # noisy level for proximity
-        self.noise_floor = 20 #floor ambient color - if floor is darker, set higher noise
-        self.p_factor = 1.2 #proximity conversion - assuming linear
-        self.d_factor = 1.04 #travel distance conversion
-        self.a_factor = 17.5 # rotation conversion, assuming linear
+        self.noise_prox = configs["noise_prox"] # noisy level for proximity
+        self.noise_floor = configs["noise_floor"] #floor ambient color - if floor is darker, set higher noise
+        self.p_factor = configs["p_factor"] #proximity conversion - assuming linear
+        self.d_factor = configs["d_factor"] #travel distance conversion
+        self.a_factor = configs["a_factor"] # rotation conversion, assuming linear
 
         rCanvas.bind_all('<w>', self.move_up)
         rCanvas.bind_all('<s>', self.move_down)
@@ -584,51 +637,61 @@ class Joystick:
         rCanvas.bind_all('<x>', self.stop_move)
         rCanvas.pack()
 
+    def set_config(self, configs):
+        self.noise_prox = configs["noise_prox"] # noisy level for proximity
+        self.noise_floor = configs["noise_floor"] #floor ambient color - if floor is darker, set higher noise
+        self.p_factor = configs["p_factor"] #proximity conversion - assuming linear
+        self.d_factor = configs["d_factor"] #travel distance conversion
+        self.a_factor = configs["a_factor"]
+
     # joysticking the robot
     def move_up(self, event=None):
-        if self.gRobotList and robot_index < len(self.gRobotList):
-            robot = self.gRobotList[robot_index]
-            self.vrobot.sl = 30
-            self.vrobot.sr = 30
-            robot.set_wheel(0,self.vrobot.sl)
-            robot.set_wheel(1,self.vrobot.sr)
-            self.vrobot.t = time.time()
+        robot = self.set_robot()
+        self.vrobot.sl = self.speed
+        self.vrobot.sr = self.speed
+        robot.set_wheel(0,self.vrobot.sl)
+        robot.set_wheel(1,self.vrobot.sr)
+        self.vrobot.t = time.time()
 
     def move_down(self, event=None):
-        if self.gRobotList and robot_index < len(self.gRobotList):
-            robot = self.gRobotList[robot_index]
-            self.vrobot.sl = -30
-            self.vrobot.sr = -30
-            robot.set_wheel(0,self.vrobot.sl)
-            robot.set_wheel(1,self.vrobot.sr)
-            self.vrobot.t = time.time()
+        robot = self.set_robot()
+        self.vrobot.sl = -1*self.speed
+        self.vrobot.sr = -1*self.speed
+        robot.set_wheel(0,self.vrobot.sl)
+        robot.set_wheel(1,self.vrobot.sr)
+        self.vrobot.t = time.time()
 
     def move_left(self, event=None):
-        if self.gRobotList and robot_index < len(self.gRobotList):
-            robot = self.gRobotList[robot_index]
-            self.vrobot.sl = -15
-            self.vrobot.sr = 15
-            robot.set_wheel(0,self.vrobot.sl)
-            robot.set_wheel(1,self.vrobot.sr)
-            self.vrobot.t = time.time()
+        robot = self.set_robot()
+        self.vrobot.sl = -1*self.speed/2
+        self.vrobot.sr = self.speed/2
+        robot.set_wheel(0,self.vrobot.sl)
+        robot.set_wheel(1,self.vrobot.sr)
+        self.vrobot.t = time.time()
 
     def move_right(self, event=None):
-        if self.gRobotList and robot_index < len(self.gRobotList):
-            robot = self.gRobotList[robot_index]
-            self.vrobot.sl = 15
-            self.vrobot.sr = -15
-            robot.set_wheel(0,self.vrobot.sl)
-            robot.set_wheel(1,self.vrobot.sr)
-            self.vrobot.t = time.time()
+        robot = self.set_robot()
+        self.vrobot.sl = self.speed/2
+        self.vrobot.sr = -1*self.speed/2
+        robot.set_wheel(0,self.vrobot.sl)
+        robot.set_wheel(1,self.vrobot.sr)
+        self.vrobot.t = time.time()
 
     def stop_move(self, event=None):
-        if self.gRobotList and robot_index < len(self.gRobotList):
-            robot = self.gRobotList[robot_index]
-            self.vrobot.sl = 0
-            self.vrobot.sr = 0
-            robot.set_wheel(0,self.vrobot.sl)
-            robot.set_wheel(1,self.vrobot.sr)
-            self.vrobot.t = time.time()
+        robot = self.set_robot()
+        self.vrobot.sl = 0
+        self.vrobot.sr = 0
+        robot.set_wheel(0,self.vrobot.sl)
+        robot.set_wheel(1,self.vrobot.sr)
+        self.vrobot.t = time.time()
+
+    def set_robot(self):
+        if self.robot != None:
+            return self.robot
+        else:
+            if self.gRobotList and robot_index < len(self.gRobotList):
+                return self.gRobotList[robot_index]
+            print "NO ROBOT FOUND"
 
     def turn_clockwise(self, angle):
         if self.gRobotList and robot_index < len(self.gRobotList):
@@ -644,10 +707,21 @@ class Joystick:
                 time.sleep(0.1)
             self.stop_move()
 
+    def play_sound(self):
+        robot = self.robot
+        robot.set_musical_note(40)
+        time.sleep(0.2)
+        robot.set_musical_note(0)
+        time.sleep(0.1)
+        robot.set_musical_note(40)
+        time.sleep(0.1)
+        robot.set_musical_note(45)
+        time.sleep(0.4)
+        robot.set_musical_note(0)
+
     def read_proximity(self):
-        if self.gRobotList and robot_index < len(self.gRobotList):
-            robot = self.gRobotList[robot_index]
-            return robot.get_proximity(0), robot.get_proximity(1)
+        robot = self.set_robot()
+        return robot.get_proximity(0), robot.get_proximity(1)
 
     def read_accelerometer_data(self, i):
         if self.gRobotList and i < len(self.gRobotList):
@@ -798,7 +872,7 @@ def main(argv=None):
     canvas_height = 380 # half height
     rCanvas = tk.Canvas(m, bg="white", width=canvas_width*2, height=canvas_height*2)
 
-    joystick = Joystick(comm, m, rCanvas)
+    joystick = Joystick(comm, m, rCanvas, robot1_config)
 
     # visual elements of the virtual robot
     poly_points = [0,0,0,0,0,0,0,0]

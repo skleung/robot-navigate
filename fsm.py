@@ -17,6 +17,8 @@ class StateMachine:
     self.states = {}
     self.currentState = None
     self.robot = robot
+    self.numTags = 0
+    self.joystick = joystick
     self.speed = 30
     self.queue = Queue.Queue()
 
@@ -27,12 +29,16 @@ class StateMachine:
 
     walk_state.add_transition("got tagged", self.turnOn, "It Walk")
     walk_state.add_transition("tagged", self.turnOff, "Walk")
-    walk_state.add_transition("obj left", self.move_left, "Walk")
-    walk_state.add_transition("obj right", self.move_right, "Walk")
-    walk_state.add_transition("obj ahead", self.joystick.localize, "Localize")
+    walk_state.add_transition("obj right", self.move_left, "Walk Left")
+    walk_state.add_transition("obj left", self.move_right, "Walk Right")
+    walk_state.add_transition("obj ahead", self.move_right, "Walk Right")
     walk_state.add_transition("clear", self.move_up, "Walk")
     walk_state.add_transition("floor left", self.move_right, "Walk Edge Left")
     walk_state.add_transition("floor right", self.move_left, "Walk Edge Right")
+    walk_state.add_transition("stop", self.stop_move, "Stop")
+    walk_state.add_transition("victory", self.victory_dance, "Victory")
+
+
     # walk edge left
     walk_edge_left_state = self.add_state("Walk Edge Left")
     walk_edge_left_state.add_transition("floor left", self.move_right, "Walk Edge Left")
@@ -40,6 +46,10 @@ class StateMachine:
     walk_edge_left_state.add_transition("floor clear", self.delay_move_up, "Walk")
     walk_edge_left_state.add_transition("got tagged", self.turnOn, "It Walk")
     walk_edge_left_state.add_transition("tagged", self.turnOff, "Walk")
+    walk_edge_left_state.add_transition("stop", self.stop_move, "Stop")
+    walk_edge_left_state.add_transition("victory", self.victory_dance, "Victory")
+
+
     # walk edge right
     walk_edge_right_state = self.add_state("Walk Edge Right")
     walk_edge_right_state.add_transition("floor left", self.move_left, "Walk Edge Right")
@@ -47,26 +57,35 @@ class StateMachine:
     walk_edge_right_state.add_transition("floor clear", self.delay_move_up, "Walk")
     walk_edge_right_state.add_transition("got tagged", self.turnOn, "It Walk")
     walk_edge_right_state.add_transition("tagged", self.turnOff, "Walk")
+    walk_edge_right_state.add_transition("stop", self.stop_move, "Stop")
+    walk_edge_right_state.add_transition("victory", self.victory_dance, "Victory")
+
     # walk left
     walk_left_state = self.add_state("Walk Left")
     walk_left_state.add_transition("obj right", self.move_left, "Walk Left")
     walk_left_state.add_transition("obj left", self.move_right, "Walk Right")
     walk_left_state.add_transition("obj ahead", self.move_left, "Walk Left")
-    walk_left_state.add_transition("clear", self.delay_move_up, "Walk")
+    walk_left_state.add_transition("clear", self.move_up, "Walk")
     walk_left_state.add_transition("floor left", self.move_right, "Walk Edge Left")
     walk_left_state.add_transition("floor right", self.move_left, "Walk Edge Right")
     walk_left_state.add_transition("got tagged", self.turnOn, "It Walk")
     walk_left_state.add_transition("tagged", self.turnOff, "Walk")
+    walk_left_state.add_transition("stop", self.stop_move, "Stop")
+    walk_left_state.add_transition("victory", self.victory_dance, "Victory")
+
     # walk right
     walk_right_state = self.add_state("Walk Right")
     walk_right_state.add_transition("obj right", self.move_left, "Walk Left")
     walk_right_state.add_transition("obj left", self.move_right, "Walk Right")
-    walk_right_state.add_transition("obj ahead", self.move_right, "Walk Right")
-    walk_right_state.add_transition("clear", self.delay_move_up, "Walk")
+    walk_right_state.add_transition("obj ahead", self.move_left, "Walk Right")
+    walk_right_state.add_transition("clear", self.move_up, "Walk")
     walk_right_state.add_transition("floor left", self.move_right, "Walk Edge Left")
     walk_right_state.add_transition("floor right", self.move_left, "Walk Edge Right")
     walk_right_state.add_transition("got tagged", self.turnOn, "It Walk")
     walk_right_state.add_transition("tagged", self.turnOff, "Walk")
+    walk_right_state.add_transition("stop", self.stop_move, "Stop")
+    walk_right_state.add_transition("victory", self.victory_dance, "Victory")
+
 
     # ---- IT ----
     # walk
@@ -79,6 +98,9 @@ class StateMachine:
     it_walk_state.add_transition("clear", self.move_up, "It Walk")
     it_walk_state.add_transition("floor left", self.move_right, "It Walk Edge Left")
     it_walk_state.add_transition("floor right", self.move_left, "It Walk Edge Right")
+    it_walk_state.add_transition("stop", self.stop_move, "Stop")
+    it_walk_state.add_transition("victory", self.victory_dance, "Victory")
+
     # it ram
     it_ram = self.add_state("It Ram")
     it_ram.add_transition("clear", self.move_up, "It Walk")
@@ -86,6 +108,9 @@ class StateMachine:
     it_ram.add_transition("got tagged", self.turnOn, "It Walk")
     it_ram.add_transition("floor left", self.move_right, "It Walk Edge Left")
     it_ram.add_transition("floor right", self.move_left, "It Walk Edge Right")
+    it_ram.add_transition("stop", self.stop_move, "Stop")
+    it_ram.add_transition("victory", self.victory_dance, "Victory")
+
     # walk edge left
     it_walk_edge_left_state = self.add_state("It Walk Edge Left")
     it_walk_edge_left_state.add_transition("floor left", self.move_right, "It Walk Edge Left")
@@ -93,6 +118,9 @@ class StateMachine:
     it_walk_edge_left_state.add_transition("floor clear", self.delay_move_up, "It Walk")
     it_walk_edge_left_state.add_transition("tagged", self.turnOff, "Walk")
     it_walk_edge_left_state.add_transition("got tagged", self.turnOn, "It Walk")
+    it_walk_edge_left_state.add_transition("stop", self.stop_move, "Stop")
+    it_walk_edge_left_state.add_transition("victory", self.victory_dance, "Victory")
+
     # walk edge right
     it_walk_edge_right_state = self.add_state("It Walk Edge Right")
     it_walk_edge_right_state.add_transition("floor left", self.move_left, "It Walk Edge Right")
@@ -100,6 +128,9 @@ class StateMachine:
     it_walk_edge_right_state.add_transition("floor clear", self.delay_move_up, "It Walk")
     it_walk_edge_right_state.add_transition("tagged", self.turnOff, "Walk")
     it_walk_edge_right_state.add_transition("got tagged", self.turnOn, "It Walk")
+    it_walk_edge_right_state.add_transition("stop", self.stop_move, "Stop")
+    it_walk_edge_right_state.add_transition("victory", self.victory_dance, "Victory")
+
     # walk left
     it_walk_left_state = self.add_state("It Walk Left")
     it_walk_left_state.add_transition("obj right", self.move_right, "It Walk Right")
@@ -110,6 +141,9 @@ class StateMachine:
     it_walk_left_state.add_transition("floor right", self.move_left, "It Walk Edge Right")
     it_walk_left_state.add_transition("tagged", self.turnOff, "Walk")
     it_walk_left_state.add_transition("got tagged", self.turnOn, "It Walk")
+    it_walk_left_state.add_transition("stop", self.stop_move, "Stop")
+    it_walk_left_state.add_transition("victory", self.victory_dance, "Victory")
+
     # walk right
     it_walk_right_state = self.add_state("It Walk Right")
     it_walk_right_state.add_transition("obj right", self.move_right, "It Walk Right")
@@ -120,21 +154,24 @@ class StateMachine:
     it_walk_right_state.add_transition("floor right", self.move_left, "It Walk Edge Right")
     it_walk_right_state.add_transition("tagged", self.turnOff, "Walk")
     it_walk_right_state.add_transition("got tagged", self.turnOn, "It Walk")
+    it_walk_right_state.add_transition("stop", self.stop_move, "Stop")
+    it_walk_right_state.add_transition("victory", self.victory_dance, "Victory")
 
-    localize_state = self.add_state("Localize")
-    localize_state.add_transition("obj ahead", self.after_localize_right, "Walk Right")
-    localize_state.add_transition("obj left", self.after_localize_right, "Walk Left")
-    localize_state.add_transition("obj right", self.after_localize_left, "Walk Right")
+    # final states
+    # stop
+    stop = self.add_state("Stop")
+    # victory
+    victory = self.add_state("Victory")
 
-  def after_localize_left(self):
-    print "after localize_left, clearing queue"
-    self.queue.queue.clear()
+  def victory_dance(self):
+    self.joystick.speed = 90
     self.move_left()
-
-  def after_localize_right(self):
-    print "after localize_right, clearing queue"
-    self.queue.queue.clear()
-    self.move_right()
+    for i in range(7):
+        self.robot.set_led(0,i)
+        self.robot.set_led(1,i)
+        self.joystick.play_sound()
+        time.sleep(0.5)
+    self.stop_move()
 
   def add_state(self, name):
     a_state = State()
@@ -156,57 +193,42 @@ class StateMachine:
 
   # set not it state
   def turnOff(self):
+    print "turning off"
     self.set_light(False)
     self.speed = 30
-    self.move_down()
-    time.sleep(1)
-    self.queue.queue.clear()
     self.move_up()
 
   # set it state
   def turnOn(self):
+    print "turning on"
     self.set_light(True)
     self.speed = 70
-    self.stop_move()
+    self.numTags += 1
+    self.move_up()
+
+  def delay_move_up(self):
     time.sleep(1)
     self.queue.queue.clear()
     self.move_up()
 
-  def is_it(self):
-    return self.currentState[0:2] == "It"
+  def move_up(self):
+    self.joystick.speed = self.speed
+    self.joystick.move_up()
 
-  def delay_move_up(self):
-    if (self.is_it()):
-        time.sleep(0.5)
-    else:
-        time.sleep(1)
-    self.queue.queue.clear()
-    self.move_up()
+  def move_down(self):
+    self.joystick.speed = self.speed
+    self.joystick.move_down()
 
-  def move_up(event=None):
-    robot = self.robot
-    robot.set_wheel(0,self.speed)
-    robot.set_wheel(1,self.speed)
+  def move_left(self):
+    self.joystick.speed = self.speed
+    self.joystick.move_left()
 
-  def move_down(event=None):
-    robot = self.robot
-    robot.set_wheel(0,-1*self.speed)
-    robot.set_wheel(1,-1*self.speed)
+  def move_right(self):
+    self.joystick.speed = self.speed
+    self.joystick.move_right()
 
-  def move_left(event=None):
-    robot = self.robot
-    robot.set_wheel(0,self.speed)
-    robot.set_wheel(1,-1*self.speed)
-
-  def move_right(event=None):
-    robot = self.robot
-    robot.set_wheel(0,-1*self.speed)
-    robot.set_wheel(1,self.speed)
-
-  def stop_move(event=None):
-    robot = self.robot
-    robot.set_wheel(0,0)
-    robot.set_wheel(1,0)
+  def stop_move(self):
+    self.joystick.stop_move()
 
   def run(self):
     self.move_up()
