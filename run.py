@@ -50,22 +50,22 @@ robot1_config = {}
 robot1_config["noise_prox"] = 25 # noisy level for proximity
 robot1_config["noise_floor"] = 20 #floor ambient color - if floor is darker, set higher noise
 robot1_config["p_factor"] = 1.2 #proximity conversion - assuming linear
-robot1_config["d_factor"] = 1.04 #travel distance conversion
-robot1_config["a_factor"] = 17.5 # rotation conversion, assuming linear
+robot1_config["d_factor"] = 0.9 #travel distance conversion
+robot1_config["a_factor"] = 18.1 # rotation conversion, assuming linear
 
 robot2_config = {}
 robot2_config["noise_prox"] = 25 # noisy level for proximity
 robot2_config["noise_floor"] = 20 #floor ambient color - if floor is darker, set higher noise
 robot2_config["p_factor"] = 1.2 #proximity conversion - assuming linear
-robot2_config["d_factor"] = 1.0 #travel distance conversion
-robot2_config["a_factor"] = 17.8 # rotation conversion, assuming linear
+robot2_config["d_factor"] = 0.95 #travel distance conversion
+robot2_config["a_factor"] = 18.0 # rotation conversion, assuming linear
 
 robot3_config = {}
 robot3_config["noise_prox"] = 25 # noisy level for proximity
 robot3_config["noise_floor"] = 20 #floor ambient color - if floor is darker, set higher noise
 robot3_config["p_factor"] = 1.2 #proximity conversion - assuming linear
-robot3_config["d_factor"] = 1.05 #travel distance conversion
-robot3_config["a_factor"] = 16.5 # rotation conversion, assuming linear
+robot3_config["d_factor"] = 0.95 #travel distance conversion
+robot3_config["a_factor"] = 17.55 # rotation conversion, assuming linear
 
 robot_configs = [robot1_config, robot2_config, robot3_config]
 
@@ -157,7 +157,7 @@ class VirtualWorldGui:
         # point 3
         # self.vworld.vrobot.y = -140
         # self.vworld.vrobot.x = 80
-        # self.vworld.vrobot.a = (3*math.pi)/2 
+        # self.vworld.vrobot.a = (3*math.pi)/2
 
 
     def toggleTrace(self, event=None):
@@ -320,8 +320,6 @@ class VirtualWorldGui:
                 print "navigating robot ", robot_index
                 time.sleep(0.5)
                 # point 1
-                joystick.move_up()
-                # point 1
                 self.follow_wall(0)
                 joystick.move_right()
                 while (vrobot.a < math.pi/2):
@@ -341,15 +339,18 @@ class VirtualWorldGui:
                 self.move_to_prox(25)
                 print "third wall done"
                 # problem area
-                joystick.turn_clockwise(2*math.pi - 0.1)    
+                joystick.turn_clockwise(2*math.pi - 0.1)
                 self.reach_y_value(-40)
                 # go through gate
                 joystick.turn_counterclockwise((3*math.pi)/2)
+                vrobot.x = 60
+                vrobot.y = -40
                 joystick.move_left()
                 while ((vrobot.dist_l and vrobot.dist_l < 40) or (vrobot.dist_r and vrobot.dist_r < 40)):
                     print "extra turning 2"
                     time.sleep(0.05)
-                joystick.stop_move()                
+                joystick.stop_move()
+
                 self.move_through()
                 self.move_to_line()
                 print "finished"
@@ -360,7 +361,7 @@ class VirtualWorldGui:
         vworld = self.vworld
         vrobot = vworld.vrobot
         if (robot_index == 0):
-            joystick.move_right() 
+            joystick.move_right()
             time.sleep(1)
         elif (robot_index == 1):
             joystick.move_left()
@@ -373,6 +374,7 @@ class VirtualWorldGui:
             time.sleep(0.05)
         joystick.move_down()
         time.sleep(1)
+        joystick.stop_move()
 
 
 
@@ -593,7 +595,7 @@ class VirtualWorldGui:
         lastX = None
         lastY = None
         smoothingFactor = 0.8
-        collisionThreshold = 700
+        collisionThreshold = 550 # original = 700
         while not gQuit:
             x, y, z = self.joysticks[i].read_accelerometer_data(i)
             acc_x = x/100.0

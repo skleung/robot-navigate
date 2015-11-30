@@ -161,7 +161,7 @@ class StateMachine:
     # stop
     stop = self.add_state("Stop")
     # victory
-    victory = self.add_state("Victory")
+    victory = self.add_state("It Victory")
 
   def victory_dance(self):
     self.joystick.speed = 90
@@ -206,8 +206,14 @@ class StateMachine:
     self.numTags += 1
     self.move_up()
 
+  def is_it(self):
+    return self.currentState[0:2] == "It"
+
   def delay_move_up(self):
-    time.sleep(1)
+    if (self.is_it()):
+        time.sleep(0.5)
+    else:
+        time.sleep(1)
     self.queue.queue.clear()
     self.move_up()
 
