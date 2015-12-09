@@ -51,21 +51,21 @@ robot1_config["noise_prox"] = 25 # noisy level for proximity
 robot1_config["noise_floor"] = 20 #floor ambient color - if floor is darker, set higher noise
 robot1_config["p_factor"] = 1.2 #proximity conversion - assuming linear
 robot1_config["d_factor"] = 0.9 #travel distance conversion
-robot1_config["a_factor"] = 18.1 # rotation conversion, assuming linear
+robot1_config["a_factor"] = 15 # rotation conversion, assuming linear
 
 robot2_config = {}
 robot2_config["noise_prox"] = 25 # noisy level for proximity
 robot2_config["noise_floor"] = 20 #floor ambient color - if floor is darker, set higher noise
 robot2_config["p_factor"] = 1.2 #proximity conversion - assuming linear
 robot2_config["d_factor"] = 0.95 #travel distance conversion
-robot2_config["a_factor"] = 18.0 # rotation conversion, assuming linear
+robot2_config["a_factor"] = 17.15 # rotation conversion, assuming linear
 
 robot3_config = {}
 robot3_config["noise_prox"] = 25 # noisy level for proximity
 robot3_config["noise_floor"] = 20 #floor ambient color - if floor is darker, set higher noise
 robot3_config["p_factor"] = 1.2 #proximity conversion - assuming linear
 robot3_config["d_factor"] = 0.95 #travel distance conversion
-robot3_config["a_factor"] = 17.55 # rotation conversion, assuming linear
+robot3_config["a_factor"] = 15.8 # rotation conversion, assuming linear
 
 robot_configs = [robot1_config, robot2_config, robot3_config]
 
