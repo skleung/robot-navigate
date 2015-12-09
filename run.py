@@ -35,7 +35,7 @@ gMaxRobotNum = 3; # max number of robots to control
 collision_queue = Queue.Queue()
 gQuit = False
 m = None
-NUM_TAGS_TO_WIN = 5
+NUM_TAGS_TO_WIN = 7
 
 #objects in the world
 rectF = [0, 50, 40, -50]
@@ -58,14 +58,14 @@ robot2_config["noise_prox"] = 25 # noisy level for proximity
 robot2_config["noise_floor"] = 20 #floor ambient color - if floor is darker, set higher noise
 robot2_config["p_factor"] = 1.2 #proximity conversion - assuming linear
 robot2_config["d_factor"] = 0.95 #travel distance conversion
-robot2_config["a_factor"] = 17.15 # rotation conversion, assuming linear
+robot2_config["a_factor"] = 17.3 # rotation conversion, assuming linear
 
 robot3_config = {}
 robot3_config["noise_prox"] = 25 # noisy level for proximity
 robot3_config["noise_floor"] = 20 #floor ambient color - if floor is darker, set higher noise
 robot3_config["p_factor"] = 1.2 #proximity conversion - assuming linear
 robot3_config["d_factor"] = 0.95 #travel distance conversion
-robot3_config["a_factor"] = 15.8 # rotation conversion, assuming linear
+robot3_config["a_factor"] = 16 # rotation conversion, assuming linear
 
 robot_configs = [robot1_config, robot2_config, robot3_config]
 
